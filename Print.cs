@@ -51,10 +51,12 @@ namespace PrintApp
             var items = data?.Items;
             string total = data?.Total;
             string receiptNo = data?.ReceiptNo;
+            string date = data?.Date;
+            string time = data?.Time;
 
             if (type == "1") // Fiþ yazdýrma
             {
-                PrintReceipt(items, total, receiptNo);
+                PrintReceipt(items, total, receiptNo, date, time);
             }
             else if (type == "2") // Barkod yazdýrma
             {
@@ -71,16 +73,17 @@ namespace PrintApp
             }
         }
 
-        private void PrintReceipt(dynamic items, string total, string receiptNo)
+        private void PrintReceipt(dynamic items, string total, string receiptNo, string date, string time)
         {
             PrintDocument printDocument = new PrintDocument();
             printDocument.PrinterSettings.PrinterName = receiptPrinterName;
             printDocument.PrintPage += (sender, e) =>
             {
                 Graphics graphics = e.Graphics;
-                float yPosition = -30;
+                float yPosition = -30; // Üstten mesafe
                 float margin = 10;
                 Font font = new Font("Arial", 10);
+                Font productFont = new Font("Arial", 9); // Ürün isimleri için daha küçük font
                 Brush brush = Brushes.Black;
 
                 // Logo ekleme
@@ -116,7 +119,7 @@ namespace PrintApp
                                 SizeF businessNameSize = graphics.MeasureString(businessName, new Font("Arial", 12, FontStyle.Bold));
                                 float businessNameX = (e.PageBounds.Width - businessNameSize.Width) / 2; // Ortalamak için X konumu
                                 graphics.DrawString(businessName, new Font("Arial", 12, FontStyle.Bold), brush, businessNameX, yPosition);
-                                yPosition += 10; // Baþlýk yüksekliði
+                                yPosition += businessNameSize.Height + 10; // Baþlýk yüksekliði ve boþluk
 
                                 // Adres
                                 string address = "ÇAY MAH.2059 SK. T4-A NO: 33 TEKKEKÖY/SAMSUN";
@@ -148,32 +151,68 @@ namespace PrintApp
 
                 // Tarih, Saat ve Fiþ Numarasý
                 DateTime now = DateTime.Now;
-                string date = $"Tarih : {now:dd/MM/yyyy}";
-                string time = $"Saat  : {now:HH:mm}";
+                string dates = $"Tarih : {date}";
+                string times = $"Saat  : {time}";
                 string receiptNumber = $"Fiþ No : {receiptNo}"; // Fiþ numarasýný burada kullanacaðýz
 
                 // Tarih
-                graphics.DrawString(date, font, brush, margin, yPosition);
-                yPosition += font.GetHeight() + 5;
+                graphics.DrawString(dates, font, brush, margin, yPosition);
 
-                // Saat
-                graphics.DrawString(time, font, brush, margin, yPosition);
+                // Saat, tarih hizasýnda saða yaslanmýþ þekilde
+                SizeF timeSize = graphics.MeasureString(times, font);
+                float timeX = e.PageBounds.Width - margin - timeSize.Width;
+                graphics.DrawString(times, font, brush, timeX, yPosition);
                 yPosition += font.GetHeight() + 5;
 
                 // Fiþ No
                 graphics.DrawString(receiptNumber, font, brush, margin, yPosition);
                 yPosition += font.GetHeight() + 10; // Fiþ numarasýnýn altýna boþluk
 
-                // Baþlýk
-                graphics.DrawString("Market Fiþi", new Font("Arial", 12, FontStyle.Bold), brush, margin, yPosition);
-                yPosition += 20;
-
-                // Ürünlerin yazdýrýlmasý
-                foreach (object item in items)
+                // Kesik çizgi ekleme
+                using (Pen pen = new Pen(Color.Black))
                 {
-                    string itemText = item.ToString();  // Object türünü string'e dönüþtürme
-                    graphics.DrawString(itemText, font, brush, margin, yPosition);
-                    yPosition += font.GetHeight() + 5;
+                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; // Kesik çizgi stili
+                    graphics.DrawLine(pen, margin, yPosition, e.PageBounds.Width - margin, yPosition);
+                    yPosition += 20; // Kesik çizgiden sonraki boþluk
+                }
+
+                // Ürün geniþlikleri
+                float itemNameWidth = e.PageBounds.Width - 2 * margin - 50; // Ürün adý geniþliði
+                float quantityWidth = 70; // Adet geniþliði
+                float priceWidth = 40; // Fiyat geniþliði
+
+                foreach (dynamic item in items)
+                {                    
+                    string itemName = item.Name.ToString().ToUpper();
+                    string itemQuantity = "x" + item.Quantity.ToString(); // Adedi buradan al
+                    string itemPrice = "*" + item.Price.ToString("F2");
+                    string truncatedItemName = TruncateText(itemName, itemNameWidth, font, e.Graphics);
+                    // Ürün adýný ve ilgili bilgileri hizalama
+
+                    // Ürün adýný çiz
+                    graphics.DrawString(truncatedItemName, productFont, brush, margin, yPosition);
+
+                    // Adet ve fiyatý ayný satýra yazma
+                    float itemNameEndX = margin + itemNameWidth;
+
+                    // Adet ve fiyat hizalama
+                    float quantityX = e.PageBounds.Width - margin - quantityWidth;
+                    float priceX = e.PageBounds.Width - margin - priceWidth;
+                   
+                    graphics.DrawString(itemQuantity, productFont, brush, quantityX, yPosition);
+                    graphics.DrawString(itemPrice, productFont, brush, priceX, yPosition);
+                    
+                    yPosition += productFont.GetHeight() + 5; // Satýr yüksekliði                    
+                }
+
+                yPosition += 20; // Burada boþluk ekliyoruz, ihtiyaca göre artýrýlabilir
+
+                // Kesik çizgi ekleme
+                using (Pen pen = new Pen(Color.Black))
+                {
+                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; // Kesik çizgi stili
+                    graphics.DrawLine(pen, margin, yPosition, e.PageBounds.Width - margin, yPosition);
+                    yPosition += 20; // Kesik çizgiden sonraki boþluk
                 }
 
                 // Fiþ alt kýsmý (toplam vs.)
@@ -204,31 +243,57 @@ namespace PrintApp
         private string[] WrapText(string text, Font font, float maxWidth)
         {
             List<string> lines = new List<string>();
-            string[] words = text.Split(' ');
             StringBuilder line = new StringBuilder();
+
+            string[] words = text.Split(' ');
 
             foreach (string word in words)
             {
+                // Mevcut satýrdaki kelime eklenmeden önce deneme
                 string testLine = line.Length == 0 ? word : line + " " + word;
                 SizeF size = TextRenderer.MeasureText(testLine, font);
+
                 if (size.Width > maxWidth)
                 {
-                    lines.Add(line.ToString());
-                    line.Clear();
+                    // Eðer test satýrý geniþliði sýnýrý aþarsa, mevcut satýrý ekle
+                    if (line.Length > 0)
+                    {
+                        lines.Add(line.ToString());
+                        line.Clear();
+                    }
+                    // Yeni satýra geçiþ
                     line.Append(word);
                 }
                 else
                 {
-                    line.Append(word);
+                    // Eðer mevcut satýra sýðarsa, kelimeyi ekle
+                    line.Append(line.Length == 0 ? word : " " + word);
                 }
             }
 
+            // Son satýrý da ekle
             if (line.Length > 0)
             {
                 lines.Add(line.ToString());
             }
 
             return lines.ToArray();
+        }
+
+        private string TruncateText(string text, float maxWidth, Font font, Graphics graphics)
+        {
+            StringBuilder truncatedText = new StringBuilder();
+            foreach (char c in text)
+            {
+                truncatedText.Append(c);
+                SizeF textSize = graphics.MeasureString(truncatedText.ToString(), font);
+                if (textSize.Width > maxWidth)
+                {
+                    truncatedText.Length--; // Son karakteri çýkart
+                    break;
+                }
+            }
+            return truncatedText.ToString() + "."; // Kesildiðini belirten iþaret
         }
 
         private void PrintBarcode(dynamic items)
