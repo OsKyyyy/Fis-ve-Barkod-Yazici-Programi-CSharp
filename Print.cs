@@ -83,7 +83,9 @@ namespace PrintApp
                 float yPosition = -30; // Üstten mesafe
                 float margin = 10;
                 Font font = new Font("Arial", 10);
+                Font infoFont = new Font("Arial", 8);
                 Font productFont = new Font("Arial", 9); // Ürün isimleri için daha küçük font
+                Font headFont = new Font("Arial", 12, FontStyle.Bold); // Baþlýk için font
                 Brush brush = Brushes.Black;
 
                 // Logo ekleme
@@ -135,7 +137,7 @@ namespace PrintApp
                                     yPosition += font.GetHeight() + 5; // Satýr yüksekliði
                                 }
 
-                                yPosition += 20; // Adresin altýna boþluk
+                                yPosition += 10; // Adresin altýna boþluk
                             }
                         }
                     }
@@ -148,6 +150,13 @@ namespace PrintApp
                 {
                     MessageBox.Show($"Logo yüklenirken bir hata oluþtu: {ex.Message}");
                 }
+
+                // "BÝLGÝ FÝÞÝ" yazýsýný ekleme
+                string infoText = "BÝLGÝ FÝÞÝ";
+                SizeF infoTextSize = graphics.MeasureString(infoText, headFont);
+                float infoTextX = (e.PageBounds.Width - infoTextSize.Width) / 2; // Ortalamak için X konumu
+                graphics.DrawString(infoText, headFont, brush, infoTextX, yPosition);
+                yPosition += infoTextSize.Height + 10; // "BÝLGÝ FÝÞÝ" yazýsýndan sonra boþluk
 
                 // Tarih, Saat ve Fiþ Numarasý
                 DateTime now = DateTime.Now;
@@ -215,17 +224,49 @@ namespace PrintApp
                     yPosition += 20; // Kesik çizgiden sonraki boþluk
                 }
 
-                // Fiþ alt kýsmý (toplam vs.)
-                yPosition += 20;
-                graphics.DrawString($"Toplam: {total} TL", new Font("Arial", 12, FontStyle.Bold), brush, margin, yPosition);
-                yPosition += 20;
+                // TOPLAM ve Toplam Tutarý yazma
+                string totalLabel = "TOPLAM";
+                string totalAmount = $"{total} TL";
+                SizeF totalLabelSize = graphics.MeasureString(totalLabel, headFont);
+                SizeF totalAmountSize = graphics.MeasureString(totalAmount, headFont);
+
+                // "TOPLAM" yazýsýný sola hizalama
+                graphics.DrawString(totalLabel, headFont, brush, margin, yPosition);
+
+                // Toplam tutarý saða hizalama
+                float totalAmountX = e.PageBounds.Width - margin - totalAmountSize.Width;
+                graphics.DrawString(totalAmount, headFont, brush, totalAmountX, yPosition);
+                yPosition += headFont.GetHeight() + 20; // Toplam tutarýn altýna boþluk
 
                 // Alt çizgi
                 graphics.DrawLine(Pens.Black, margin, yPosition, e.PageBounds.Width - margin, yPosition);
                 yPosition += 20;
 
-                // Ýmza vs.
-                graphics.DrawString("Teþekkürler!", font, brush, margin, yPosition);
+                // TEÞEKKÜRLER yazýsýný ekleme
+                string thankYouText = "TEÞEKKÜRLER";
+                SizeF thankYouSize = graphics.MeasureString(thankYouText, headFont);
+                float thankYouX = (e.PageBounds.Width - thankYouSize.Width) / 2;
+                graphics.DrawString(thankYouText, headFont, brush, thankYouX, yPosition);
+                yPosition += headFont.GetHeight() + 5;
+
+                // Yine Bekleriz yazýsýný ekleme
+                string againText = "iyi günler, yine bekleriz";
+                SizeF againSize = graphics.MeasureString(againText, font);
+                float againX = (e.PageBounds.Width - againSize.Width) / 2;
+                graphics.DrawString(againText, font, brush, againX, yPosition);
+                yPosition += headFont.GetHeight() + 20;
+
+                // Bilgi yazýsýný ekleme
+                string infoTextFooter = "*** Bilgi Fiþidir. Mali Deðeri Yok. ***";
+                SizeF infoSize = graphics.MeasureString(infoTextFooter, font);
+                float infoX = (e.MarginBounds.Width - infoSize.Width) / 2 + e.MarginBounds.Left;
+                graphics.DrawString(infoTextFooter, font, brush, infoX, yPosition);
+                yPosition += font.GetHeight() + 20;
+
+                string test = "###";
+                SizeF testSize = graphics.MeasureString(test, font);
+                float testX = (e.MarginBounds.Width - testSize.Width) / 2 + e.MarginBounds.Left;
+                graphics.DrawString(test, font, brush, testX, yPosition);
 
                 e.HasMorePages = false;
             };
