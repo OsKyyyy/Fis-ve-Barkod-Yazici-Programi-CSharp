@@ -22,27 +22,36 @@ namespace PrintApp
         public Print()
         {
             InitializeComponent();
-            StartListening();
+            // Formu gizle
+            this.Load += (sender, e) =>
+            {
+                this.WindowState = FormWindowState.Minimized; // Formu simge durumuna küçült
+                this.ShowInTaskbar = false; // Görev çubuðunda gösterme
+                this.Hide(); // Formu gizle
+            };
+            StartListeningAsync();
         }
 
-        private void StartListening()
+        private async Task StartListeningAsync()
         {
             HttpListener listener = new HttpListener();
             listener.Prefixes.Add("http://localhost:5000/");
             listener.Start();
-            listener.BeginGetContext(new AsyncCallback(ProcessRequest), listener);
+
+            while (true)
+            {
+                HttpListenerContext context = await listener.GetContextAsync();
+                _ = ProcessRequestAsync(context); // ProcessRequestAsync'i çaðýrýyoruz ve görev sonucu ile ilgilenmiyoruz
+            }
         }
 
-        private void ProcessRequest(IAsyncResult result)
+        private async Task ProcessRequestAsync(HttpListenerContext context)
         {
-            HttpListener listener = (HttpListener)result.AsyncState;
-            HttpListenerContext context = listener.EndGetContext(result);
-
             HttpListenerRequest request = context.Request;
             string body;
             using (var reader = new StreamReader(request.InputStream))
             {
-                body = reader.ReadToEnd();
+                body = await reader.ReadToEndAsync();
             }
 
             dynamic data = Newtonsoft.Json.JsonConvert.DeserializeObject(body);
@@ -54,23 +63,69 @@ namespace PrintApp
             string date = data?.Date;
             string time = data?.Time;
 
-            if (type == "1") // Fiþ yazdýrma
+            try
             {
-                PrintReceipt(items, total, receiptNo, date, time);
-            }
-            else if (type == "2") // Barkod yazdýrma
-            {
-                PrintBarcode(items);
-            }
+                if (type == "1") // Fiþ yazdýrma
+                {
+                    PrintReceipt(items, total, receiptNo, date, time);
+                }
+                else if (type == "2") // Barkod yazdýrma
+                {
+                    PrintBarcode(items);
+                }
 
-            HttpListenerResponse response = context.Response;
-            string responseString = "Success";
-            byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
+                // JSON yanýtý hazýrlama
+                var responseObject = new
+                {
+                    status = true,
+                    message = "Ýþlem baþarýyla tamamlandý."
+                };
+
+                // Yanýtý JSON formatýnda döndürme
+                HttpListenerResponse response = context.Response;
+                string responseString = Newtonsoft.Json.JsonConvert.SerializeObject(responseObject);
+                byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
+                response.ContentLength64 = buffer.Length;
+                response.ContentType = "application/json"; // JSON içerik tipi
+                using (var output = response.OutputStream)
+                {
+                    await output.WriteAsync(buffer, 0, buffer.Length);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Hata durumunda JSON yanýtý hazýrlama
+                var errorResponseObject = new
+                {
+                    status = false,
+                    message = $"Bir hata oluþtu: {ex.Message}"
+                };
+
+                HttpListenerResponse response = context.Response;
+                string responseString = Newtonsoft.Json.JsonConvert.SerializeObject(errorResponseObject);
+                byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
+                response.ContentLength64 = buffer.Length;
+                response.ContentType = "application/json"; // JSON içerik tipi
+                using (var output = response.OutputStream)
+                {
+                    await output.WriteAsync(buffer, 0, buffer.Length);
+                }
+            }
+        }
+
+        private void SendResponse(HttpListenerResponse response, string responseString)
+        {
+            byte[] buffer = Encoding.UTF8.GetBytes(responseString);
             response.ContentLength64 = buffer.Length;
             using (var output = response.OutputStream)
             {
                 output.Write(buffer, 0, buffer.Length);
             }
+        }
+
+        private void LogError(string message)
+        {
+            File.AppendAllText("error_log.txt", $"{DateTime.Now}: {message}\n");
         }
 
         private void PrintReceipt(dynamic items, string total, string receiptNo, string date, string time)

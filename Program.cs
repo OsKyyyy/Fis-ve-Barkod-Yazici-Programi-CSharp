@@ -7,11 +7,11 @@ namespace PrintApp
     {
         [STAThread]
         static void Main()
-        {
+        {      
             Application.SetHighDpiMode(HighDpiMode.SystemAware);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Print());
+            Application.Run(new Print()); 
         }
     }
 }
