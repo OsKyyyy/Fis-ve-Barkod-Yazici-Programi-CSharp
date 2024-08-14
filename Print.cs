@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Printing;
@@ -11,13 +11,16 @@ using System.Text.Json;
 using ZXing;
 using ZXing.QrCode;
 using ZXing.Common;
+using ZXing.Rendering;
+using ZXing.Windows.Compatibility;
+using ZXing.QrCode.Internal;
 
 namespace PrintApp
 {
     public partial class Print : Form
     {
-        private string receiptPrinterName = "80mm Series Printer"; // Fiþ yazýcýsýnýn adý
-        private string barcodePrinterName = "80mm Series Printer"; // Barkod yazýcýsýnýn adý
+        private string receiptPrinterName = "80mm Series Printer"; // FiÅŸ yazÄ±cÄ±sÄ±nÄ±n adÄ±
+        private string barcodePrinterName = "80mm Series Printer"; // Barkod yazÄ±cÄ±sÄ±nÄ±n adÄ±
 
         public Print()
         {
@@ -25,8 +28,8 @@ namespace PrintApp
             // Formu gizle
             this.Load += (sender, e) =>
             {
-                this.WindowState = FormWindowState.Minimized; // Formu simge durumuna küçült
-                this.ShowInTaskbar = false; // Görev çubuðunda gösterme
+                this.WindowState = FormWindowState.Minimized; // Formu simge durumuna kÃ¼Ã§Ã¼lt
+                this.ShowInTaskbar = false; // GÃ¶rev Ã§ubuÄŸunda gÃ¶sterme
                 this.Hide(); // Formu gizle
             };
             StartListeningAsync();
@@ -41,7 +44,7 @@ namespace PrintApp
             while (true)
             {
                 HttpListenerContext context = await listener.GetContextAsync();
-                _ = ProcessRequestAsync(context); // ProcessRequestAsync'i çaðýrýyoruz ve görev sonucu ile ilgilenmiyoruz
+                _ = ProcessRequestAsync(context); // ProcessRequestAsync'i Ã§aÄŸÄ±rÄ±yoruz ve gÃ¶rev sonucu ile ilgilenmiyoruz
             }
         }
 
@@ -56,37 +59,43 @@ namespace PrintApp
 
             dynamic data = Newtonsoft.Json.JsonConvert.DeserializeObject(body);
 
-            string type = data?.type;
+            string type = data?.Type;
+
             var items = data?.Items;
             string total = data?.Total;
             string receiptNo = data?.ReceiptNo;
             string date = data?.Date;
             string time = data?.Time;
 
+            string code = data?.Code;
+            string productName = data?.ProductName;
+            string productPrice = data?.ProductPrice;
+            string priceChangeDate = data?.PriceChangeDate;
+
             try
             {
-                if (type == "1") // Fiþ yazdýrma
+                if (type == "1") // FiÅŸ yazdÄ±rma
                 {
                     PrintReceipt(items, total, receiptNo, date, time);
                 }
-                else if (type == "2") // Barkod yazdýrma
+                else if (type == "2") // Barkod yazdÄ±rma
                 {
-                    PrintBarcode(items);
+                    PrintBarcode(code, productName, productPrice, priceChangeDate);
                 }
 
-                // JSON yanýtý hazýrlama
+                // JSON yanÄ±tÄ± hazÄ±rlama
                 var responseObject = new
                 {
                     status = true,
-                    message = "Ýþlem baþarýyla tamamlandý."
+                    message = "Ä°ÅŸlem baÅŸarÄ±yla tamamlandÄ±."
                 };
 
-                // Yanýtý JSON formatýnda döndürme
+                // YanÄ±tÄ± JSON formatÄ±nda dÃ¶ndÃ¼rme
                 HttpListenerResponse response = context.Response;
                 string responseString = Newtonsoft.Json.JsonConvert.SerializeObject(responseObject);
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
                 response.ContentLength64 = buffer.Length;
-                response.ContentType = "application/json"; // JSON içerik tipi
+                response.ContentType = "application/json"; // JSON iÃ§erik tipi
                 using (var output = response.OutputStream)
                 {
                     await output.WriteAsync(buffer, 0, buffer.Length);
@@ -94,18 +103,18 @@ namespace PrintApp
             }
             catch (Exception ex)
             {
-                // Hata durumunda JSON yanýtý hazýrlama
+                // Hata durumunda JSON yanÄ±tÄ± hazÄ±rlama
                 var errorResponseObject = new
                 {
                     status = false,
-                    message = $"Bir hata oluþtu: {ex.Message}"
+                    message = $"Bir hata oluÅŸtu: {ex.Message}"
                 };
 
                 HttpListenerResponse response = context.Response;
                 string responseString = Newtonsoft.Json.JsonConvert.SerializeObject(errorResponseObject);
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
                 response.ContentLength64 = buffer.Length;
-                response.ContentType = "application/json"; // JSON içerik tipi
+                response.ContentType = "application/json"; // JSON iÃ§erik tipi
                 using (var output = response.OutputStream)
                 {
                     await output.WriteAsync(buffer, 0, buffer.Length);
@@ -135,12 +144,12 @@ namespace PrintApp
             printDocument.PrintPage += (sender, e) =>
             {
                 Graphics graphics = e.Graphics;
-                float yPosition = -30; // Üstten mesafe
+                float yPosition = -30; // Ãœstten mesafe
                 float margin = 10;
                 Font font = new Font("Arial", 10);
                 Font infoFont = new Font("Arial", 8);
-                Font productFont = new Font("Arial", 9); // Ürün isimleri için daha küçük font
-                Font headFont = new Font("Arial", 12, FontStyle.Bold); // Baþlýk için font
+                Font productFont = new Font("Arial", 9); // ÃœrÃ¼n isimleri iÃ§in daha kÃ¼Ã§Ã¼k font
+                Font headFont = new Font("Arial", 12, FontStyle.Bold); // BaÅŸlÄ±k iÃ§in font
                 Brush brush = Brushes.Black;
 
                 // Logo ekleme
@@ -151,99 +160,99 @@ namespace PrintApp
                     {
                         using (Image originalLogo = Image.FromFile(logoPath))
                         {
-                            // Logo boyutlarý
-                            int newWidth = 175; // Ýstediðiniz geniþlik
-                            int newHeight = (int)(originalLogo.Height * (newWidth / (float)originalLogo.Width)); // Orantýlý yükseklik
+                            // Logo boyutlarÄ±
+                            int newWidth = 175; // Ä°stediÄŸiniz geniÅŸlik
+                            int newHeight = (int)(originalLogo.Height * (newWidth / (float)originalLogo.Width)); // OrantÄ±lÄ± yÃ¼kseklik
 
-                            // Yeniden boyutlandýrýlmýþ logo oluþturma
+                            // Yeniden boyutlandÄ±rÄ±lmÄ±ÅŸ logo oluÅŸturma
                             using (Bitmap resizedLogo = new Bitmap(originalLogo, newWidth, newHeight))
                             {
                                 float logoWidth = resizedLogo.Width;
                                 float logoHeight = resizedLogo.Height;
 
-                                // Resmi sayfanýn ortasýna konumlandýrma
+                                // Resmi sayfanÄ±n ortasÄ±na konumlandÄ±rma
                                 float pageWidth = e.PageBounds.Width;
                                 float logoX = (pageWidth - logoWidth) / 2;
                                 float logoY = yPosition;
 
                                 graphics.DrawImage(resizedLogo, logoX, logoY);
 
-                                // Logonun altýna baþlýk ve adres ekleme
-                                yPosition += logoHeight; // Logo yüksekliði ve boþluk
+                                // Logonun altÄ±na baÅŸlÄ±k ve adres ekleme
+                                yPosition += logoHeight; // Logo yÃ¼ksekliÄŸi ve boÅŸluk
 
-                                // Ýþletme adý
+                                // Ä°ÅŸletme adÄ±
                                 string businessName = "YILMAZ MARKET";
                                 SizeF businessNameSize = graphics.MeasureString(businessName, new Font("Arial", 12, FontStyle.Bold));
-                                float businessNameX = (e.PageBounds.Width - businessNameSize.Width) / 2; // Ortalamak için X konumu
+                                float businessNameX = (e.PageBounds.Width - businessNameSize.Width) / 2; // Ortalamak iÃ§in X konumu
                                 graphics.DrawString(businessName, new Font("Arial", 12, FontStyle.Bold), brush, businessNameX, yPosition);
-                                yPosition += businessNameSize.Height + 10; // Baþlýk yüksekliði ve boþluk
+                                yPosition += businessNameSize.Height + 10; // BaÅŸlÄ±k yÃ¼ksekliÄŸi ve boÅŸluk
 
                                 // Adres
-                                string address = "ÇAY MAH.2059 SK. T4-A NO: 33 TEKKEKÖY/SAMSUN";
-                                float addressWidth = e.PageBounds.Width - 2 * margin; // Adres geniþliði
+                                string address = "Ã‡AY MAH.2059 SK. T4-A NO: 33 TEKKEKÃ–Y/SAMSUN";
+                                float addressWidth = e.PageBounds.Width - 2 * margin; // Adres geniÅŸliÄŸi
                                 string[] addressLines = WrapText(address, font, addressWidth);
 
-                                // Adresi ortalama iþlemi
+                                // Adresi ortalama iÅŸlemi
                                 foreach (string line in addressLines)
                                 {
                                     SizeF lineSize = graphics.MeasureString(line, font);
-                                    float lineX = (e.PageBounds.Width - lineSize.Width) / 2; // Ortalamak için X konumu
+                                    float lineX = (e.PageBounds.Width - lineSize.Width) / 2; // Ortalamak iÃ§in X konumu
                                     graphics.DrawString(line, font, brush, lineX, yPosition);
-                                    yPosition += font.GetHeight() + 5; // Satýr yüksekliði
+                                    yPosition += font.GetHeight() + 5; // SatÄ±r yÃ¼ksekliÄŸi
                                 }
 
-                                yPosition += 10; // Adresin altýna boþluk
+                                yPosition += 10; // Adresin altÄ±na boÅŸluk
                             }
                         }
                     }
                     else
                     {
-                        MessageBox.Show("Logo dosyasý bulunamadý.");
+                        MessageBox.Show("Logo dosyasÄ± bulunamadÄ±.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Logo yüklenirken bir hata oluþtu: {ex.Message}");
+                    MessageBox.Show($"Logo yÃ¼klenirken bir hata oluÅŸtu: {ex.Message}");
                 }
 
-                // "BÝLGÝ FÝÞÝ" yazýsýný ekleme
-                string infoText = "BÝLGÝ FÝÞÝ";
+                // "BÄ°LGÄ° FÄ°ÅžÄ°" yazÄ±sÄ±nÄ± ekleme
+                string infoText = "BÄ°LGÄ° FÄ°ÅžÄ°";
                 SizeF infoTextSize = graphics.MeasureString(infoText, headFont);
-                float infoTextX = (e.PageBounds.Width - infoTextSize.Width) / 2; // Ortalamak için X konumu
+                float infoTextX = (e.PageBounds.Width - infoTextSize.Width) / 2; // Ortalamak iÃ§in X konumu
                 graphics.DrawString(infoText, headFont, brush, infoTextX, yPosition);
-                yPosition += infoTextSize.Height + 10; // "BÝLGÝ FÝÞÝ" yazýsýndan sonra boþluk
+                yPosition += infoTextSize.Height + 10; // "BÄ°LGÄ° FÄ°ÅžÄ°" yazÄ±sÄ±ndan sonra boÅŸluk
 
-                // Tarih, Saat ve Fiþ Numarasý
+                // Tarih, Saat ve FiÅŸ NumarasÄ±
                 DateTime now = DateTime.Now;
                 string dates = $"Tarih : {date}";
                 string times = $"Saat  : {time}";
-                string receiptNumber = $"Fiþ No : {receiptNo}"; // Fiþ numarasýný burada kullanacaðýz
+                string receiptNumber = $"FiÅŸ No : {receiptNo}"; // FiÅŸ numarasÄ±nÄ± burada kullanacaÄŸÄ±z
 
                 // Tarih
                 graphics.DrawString(dates, font, brush, margin, yPosition);
 
-                // Saat, tarih hizasýnda saða yaslanmýþ þekilde
+                // Saat, tarih hizasÄ±nda saÄŸa yaslanmÄ±ÅŸ ÅŸekilde
                 SizeF timeSize = graphics.MeasureString(times, font);
                 float timeX = e.PageBounds.Width - margin - timeSize.Width;
                 graphics.DrawString(times, font, brush, timeX, yPosition);
                 yPosition += font.GetHeight() + 5;
 
-                // Fiþ No
+                // FiÅŸ No
                 graphics.DrawString(receiptNumber, font, brush, margin, yPosition);
-                yPosition += font.GetHeight() + 10; // Fiþ numarasýnýn altýna boþluk
+                yPosition += font.GetHeight() + 10; // FiÅŸ numarasÄ±nÄ±n altÄ±na boÅŸluk
 
-                // Kesik çizgi ekleme
+                // Kesik Ã§izgi ekleme
                 using (Pen pen = new Pen(Color.Black))
                 {
-                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; // Kesik çizgi stili
+                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; // Kesik Ã§izgi stili
                     graphics.DrawLine(pen, margin, yPosition, e.PageBounds.Width - margin, yPosition);
-                    yPosition += 20; // Kesik çizgiden sonraki boþluk
+                    yPosition += 20; // Kesik Ã§izgiden sonraki boÅŸluk
                 }
 
-                // Ürün geniþlikleri
-                float itemNameWidth = e.PageBounds.Width - 2 * margin - 50; // Ürün adý geniþliði
-                float quantityWidth = 70; // Adet geniþliði
-                float priceWidth = 40; // Fiyat geniþliði
+                // ÃœrÃ¼n geniÅŸlikleri
+                float itemNameWidth = e.PageBounds.Width - 2 * margin - 50; // ÃœrÃ¼n adÄ± geniÅŸliÄŸi
+                float quantityWidth = 70; // Adet geniÅŸliÄŸi
+                float priceWidth = 40; // Fiyat geniÅŸliÄŸi
 
                 foreach (dynamic item in items)
                 {                    
@@ -251,12 +260,12 @@ namespace PrintApp
                     string itemQuantity = "x" + item.Quantity.ToString(); // Adedi buradan al
                     string itemPrice = "*" + item.Price.ToString("F2");
                     string truncatedItemName = TruncateText(itemName, itemNameWidth, font, e.Graphics);
-                    // Ürün adýný ve ilgili bilgileri hizalama
+                    // ÃœrÃ¼n adÄ±nÄ± ve ilgili bilgileri hizalama
 
-                    // Ürün adýný çiz
+                    // ÃœrÃ¼n adÄ±nÄ± Ã§iz
                     graphics.DrawString(truncatedItemName, productFont, brush, margin, yPosition);
 
-                    // Adet ve fiyatý ayný satýra yazma
+                    // Adet ve fiyatÄ± aynÄ± satÄ±ra yazma
                     float itemNameEndX = margin + itemNameWidth;
 
                     // Adet ve fiyat hizalama
@@ -266,53 +275,53 @@ namespace PrintApp
                     graphics.DrawString(itemQuantity, productFont, brush, quantityX, yPosition);
                     graphics.DrawString(itemPrice, productFont, brush, priceX, yPosition);
                     
-                    yPosition += productFont.GetHeight() + 5; // Satýr yüksekliði                    
+                    yPosition += productFont.GetHeight() + 5; // SatÄ±r yÃ¼ksekliÄŸi                    
                 }
 
-                yPosition += 20; // Burada boþluk ekliyoruz, ihtiyaca göre artýrýlabilir
+                yPosition += 20; // Burada boÅŸluk ekliyoruz, ihtiyaca gÃ¶re artÄ±rÄ±labilir
 
-                // Kesik çizgi ekleme
+                // Kesik Ã§izgi ekleme
                 using (Pen pen = new Pen(Color.Black))
                 {
-                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; // Kesik çizgi stili
+                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; // Kesik Ã§izgi stili
                     graphics.DrawLine(pen, margin, yPosition, e.PageBounds.Width - margin, yPosition);
-                    yPosition += 20; // Kesik çizgiden sonraki boþluk
+                    yPosition += 20; // Kesik Ã§izgiden sonraki boÅŸluk
                 }
 
-                // TOPLAM ve Toplam Tutarý yazma
+                // TOPLAM ve Toplam TutarÄ± yazma
                 string totalLabel = "TOPLAM";
                 string totalAmount = $"{total} TL";
                 SizeF totalLabelSize = graphics.MeasureString(totalLabel, headFont);
                 SizeF totalAmountSize = graphics.MeasureString(totalAmount, headFont);
 
-                // "TOPLAM" yazýsýný sola hizalama
+                // "TOPLAM" yazÄ±sÄ±nÄ± sola hizalama
                 graphics.DrawString(totalLabel, headFont, brush, margin, yPosition);
 
-                // Toplam tutarý saða hizalama
+                // Toplam tutarÄ± saÄŸa hizalama
                 float totalAmountX = e.PageBounds.Width - margin - totalAmountSize.Width;
                 graphics.DrawString(totalAmount, headFont, brush, totalAmountX, yPosition);
-                yPosition += headFont.GetHeight() + 20; // Toplam tutarýn altýna boþluk
+                yPosition += headFont.GetHeight() + 20; // Toplam tutarÄ±n altÄ±na boÅŸluk
 
-                // Alt çizgi
+                // Alt Ã§izgi
                 graphics.DrawLine(Pens.Black, margin, yPosition, e.PageBounds.Width - margin, yPosition);
                 yPosition += 20;
 
-                // TEÞEKKÜRLER yazýsýný ekleme
-                string thankYouText = "TEÞEKKÜRLER";
+                // TEÅžEKKÃœRLER yazÄ±sÄ±nÄ± ekleme
+                string thankYouText = "TEÅžEKKÃœRLER";
                 SizeF thankYouSize = graphics.MeasureString(thankYouText, headFont);
                 float thankYouX = (e.PageBounds.Width - thankYouSize.Width) / 2;
                 graphics.DrawString(thankYouText, headFont, brush, thankYouX, yPosition);
                 yPosition += headFont.GetHeight() + 5;
 
-                // Yine Bekleriz yazýsýný ekleme
-                string againText = "iyi günler, yine bekleriz";
+                // Yine Bekleriz yazÄ±sÄ±nÄ± ekleme
+                string againText = "iyi gÃ¼nler, yine bekleriz";
                 SizeF againSize = graphics.MeasureString(againText, font);
                 float againX = (e.PageBounds.Width - againSize.Width) / 2;
                 graphics.DrawString(againText, font, brush, againX, yPosition);
                 yPosition += headFont.GetHeight() + 20;
 
-                // Bilgi yazýsýný ekleme
-                string infoTextFooter = "*** Bilgi Fiþidir. Mali Deðeri Yok. ***";
+                // Bilgi yazÄ±sÄ±nÄ± ekleme
+                string infoTextFooter = "*** Bilgi FiÅŸidir. Mali DeÄŸeri Yok. ***";
                 SizeF infoSize = graphics.MeasureString(infoTextFooter, font);
                 float infoX = (e.MarginBounds.Width - infoSize.Width) / 2 + e.MarginBounds.Left;
                 graphics.DrawString(infoTextFooter, font, brush, infoX, yPosition);
@@ -332,7 +341,7 @@ namespace PrintApp
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Yazdýrma hatasý: {ex.Message}");
+                MessageBox.Show($"YazdÄ±rma hatasÄ±: {ex.Message}");
             }
         }
 
@@ -345,29 +354,29 @@ namespace PrintApp
 
             foreach (string word in words)
             {
-                // Mevcut satýrdaki kelime eklenmeden önce deneme
+                // Mevcut satÄ±rdaki kelime eklenmeden Ã¶nce deneme
                 string testLine = line.Length == 0 ? word : line + " " + word;
                 SizeF size = TextRenderer.MeasureText(testLine, font);
 
                 if (size.Width > maxWidth)
                 {
-                    // Eðer test satýrý geniþliði sýnýrý aþarsa, mevcut satýrý ekle
+                    // EÄŸer test satÄ±rÄ± geniÅŸliÄŸi sÄ±nÄ±rÄ± aÅŸarsa, mevcut satÄ±rÄ± ekle
                     if (line.Length > 0)
                     {
                         lines.Add(line.ToString());
                         line.Clear();
                     }
-                    // Yeni satýra geçiþ
+                    // Yeni satÄ±ra geÃ§iÅŸ
                     line.Append(word);
                 }
                 else
                 {
-                    // Eðer mevcut satýra sýðarsa, kelimeyi ekle
+                    // EÄŸer mevcut satÄ±ra sÄ±ÄŸarsa, kelimeyi ekle
                     line.Append(line.Length == 0 ? word : " " + word);
                 }
             }
 
-            // Son satýrý da ekle
+            // Son satÄ±rÄ± da ekle
             if (line.Length > 0)
             {
                 lines.Add(line.ToString());
@@ -385,29 +394,74 @@ namespace PrintApp
                 SizeF textSize = graphics.MeasureString(truncatedText.ToString(), font);
                 if (textSize.Width > maxWidth)
                 {
-                    truncatedText.Length--; // Son karakteri çýkart
+                    truncatedText.Length--; // Son karakteri Ã§Ä±kart
                     break;
                 }
             }
-            return truncatedText.ToString() + "."; // Kesildiðini belirten iþaret
+            return truncatedText.ToString() + "."; // KesildiÄŸini belirten iÅŸaret
         }
 
-        private void PrintBarcode(dynamic items)
+        private void PrintBarcode(string code, string productName, string productPrice, string priceChangeDate)
         {
             PrintDocument printDocument = new PrintDocument();
             printDocument.PrinterSettings.PrinterName = barcodePrinterName;
             printDocument.PrintPage += (sender, e) =>
             {
-                float yPosition = 0;
                 float margin = 10;
+                float yPosition = margin;
+                float maxWidth = e.PageBounds.Width - 2 * margin;
+                float lineHeight = 20; // SatÄ±r yÃ¼ksekliÄŸi
+                Font priceFont = new Font("Arial", 20, FontStyle.Bold);
+                Font boldFont = new Font("Arial", 12, FontStyle.Bold);
+                Font regularFont = new Font("Arial", 10);
+                Font smallFont = new Font("Arial", 8);
+                Brush brush = Brushes.Black;
 
-                foreach (var item in items)
+                // ÃœrÃ¼n adÄ±nÄ± Ã§ok satÄ±ra bÃ¶lme
+                string[] productNameLines = WrapText(productName, boldFont, maxWidth);
+
+                // ÃœrÃ¼n adÄ± Ã§izimi
+                foreach (string line in productNameLines)
                 {
-                    string code = item.Code; // `item`'ýn `Code` özelliðini `string` olarak alýn
-                    Bitmap barcodeImage = GenerateBarcode(code);
-                    e.Graphics.DrawImage(barcodeImage, margin, yPosition);
-                    yPosition += barcodeImage.Height + 10;
+                    e.Graphics.DrawString(line, boldFont, brush, margin, yPosition);
+                    yPosition += lineHeight;
                 }
+
+                // Fiyat deÄŸiÅŸiklik tarihi
+                yPosition += 30; // ÃœrÃ¼n adÄ± ve fiyat deÄŸiÅŸiklik tarihi arasÄ±na boÅŸluk bÄ±rak
+                e.Graphics.DrawString($"Fiyat DeÄŸiÅŸiklik Tarihi : {priceChangeDate}", smallFont, brush, margin, yPosition);
+                yPosition += lineHeight;
+
+                // Barkod resmi
+                Bitmap barcodeImage = GenerateBarcode(code);
+                e.Graphics.DrawImage(barcodeImage, margin, yPosition);
+
+                // ÃœrÃ¼n fiyatÄ±nÄ± barkodun saÄŸ tarafÄ±na hizalamak iÃ§in
+                //float priceXPosition = margin + 160;
+                //e.Graphics.DrawString(productPrice + " â‚º", priceFont, Brushes.Black, priceXPosition, yPosition);
+
+                //// "KDV Dahil" yazÄ±sÄ±
+                //string kdvText = "KDV Dahil";
+                //SizeF kdvTextSize = e.Graphics.MeasureString(kdvText, smallFont);
+                //float kdvXPosition = priceXPosition + e.Graphics.MeasureString(productPrice, regularFont).Width;
+                //float kdvYPosition = yPosition + lineHeight + 15; // FiyatÄ±n hemen altÄ±na hizala
+                //e.Graphics.DrawString(kdvText, smallFont, Brushes.Black, kdvXPosition, kdvYPosition);
+
+                // Fiyat ve "KDV Dahil" yazÄ±sÄ±
+                SizeF priceSize = e.Graphics.MeasureString(productPrice, priceFont);
+                SizeF kdvTextSize = e.Graphics.MeasureString("KDV Dahil", smallFont);
+
+                // FiyatÄ±n saÄŸ kenarÄ± iÃ§in hesaplama
+                float priceXPosition = margin + 150;
+                float kdvXPosition = priceXPosition + priceSize.Width - kdvTextSize.Width + 10;
+                float priceYPosition = yPosition;
+                float kdvYPosition = yPosition + priceSize.Height;
+
+                e.Graphics.DrawString(productPrice + " â‚º", priceFont, Brushes.Black, priceXPosition, priceYPosition);
+                e.Graphics.DrawString("KDV Dahil", smallFont, Brushes.Black, kdvXPosition, kdvYPosition);
+
+                // Barkod yÃ¼ksekliÄŸi + kÃ¼Ã§Ã¼k bir boÅŸluk
+                yPosition += barcodeImage.Height + 10;
 
                 e.HasMorePages = false;
             };
@@ -418,25 +472,26 @@ namespace PrintApp
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Yazdýrma hatasý: {ex.Message}");
+                MessageBox.Show($"YazdÄ±rma hatasÄ±: {ex.Message}");
             }
         }
 
-        private Bitmap GenerateBarcode(string code)
+        private Bitmap GenerateBarcode(string barcodeText)
         {
-            var barcodeWriter = new BarcodeWriter<Bitmap>
+            BarcodeWriter<Bitmap> barcodeWriter = new BarcodeWriter<Bitmap>
             {
-                Format = BarcodeFormat.CODE_128, // Barkod formatýný ayarlayýn
+                Format = BarcodeFormat.CODE_128, // Barkod formatÄ±
                 Options = new EncodingOptions
                 {
-                    Width = 300, // Barkod geniþliði
-                    Height = 150 // Barkod yüksekliði
-                }
+                    Width = 50,
+                    Height = 50
+                },
+                Renderer = new BitmapRenderer() // Renderer ayarlarÄ±
             };
 
-            // Barkod resmi oluþtur
-            Bitmap bitmap = barcodeWriter.Write(code);
-            return bitmap;
+            // Barkod resmi oluÅŸturma
+            Bitmap barcodeBitmap = barcodeWriter.Write(barcodeText);
+            return barcodeBitmap;
         }
     }
 }
