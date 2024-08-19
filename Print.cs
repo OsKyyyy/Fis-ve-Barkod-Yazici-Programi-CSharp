@@ -51,6 +51,22 @@ namespace PrintApp
         private async Task ProcessRequestAsync(HttpListenerContext context)
         {
             HttpListenerRequest request = context.Request;
+            HttpListenerResponse response = context.Response;
+
+            // CORS başlıklarını ekle
+            response.AddHeader("Access-Control-Allow-Origin", "*");
+            response.AddHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            response.AddHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+            // OPTIONS isteğini ele al
+            if (request.HttpMethod == "OPTIONS")
+            {
+                response.StatusCode = (int)HttpStatusCode.OK;
+                await response.OutputStream.FlushAsync();
+                response.Close();
+                return;
+            }
+
             string body;
             using (var reader = new StreamReader(request.InputStream))
             {
@@ -91,7 +107,6 @@ namespace PrintApp
                 };
 
                 // Yanıtı JSON formatında döndürme
-                HttpListenerResponse response = context.Response;
                 string responseString = Newtonsoft.Json.JsonConvert.SerializeObject(responseObject);
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
                 response.ContentLength64 = buffer.Length;
@@ -110,7 +125,6 @@ namespace PrintApp
                     message = $"Bir hata oluştu: {ex.Message}"
                 };
 
-                HttpListenerResponse response = context.Response;
                 string responseString = Newtonsoft.Json.JsonConvert.SerializeObject(errorResponseObject);
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
                 response.ContentLength64 = buffer.Length;
