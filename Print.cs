@@ -87,6 +87,8 @@ namespace PrintApp
             string productName = data?.ProductName;
             string productPrice = data?.ProductPrice;
             string priceChangeDate = data?.PriceChangeDate;
+            string origin = data?.Origin;
+            string unitprice = data?.UnitPrice;
 
             try
             {
@@ -96,7 +98,7 @@ namespace PrintApp
                 }
                 else if (type == "2") // Barkod yazdırma
                 {
-                    PrintBarcode(code, productName, productPrice, priceChangeDate);
+                    PrintBarcode(code, productName, productPrice, priceChangeDate, unitprice, origin);
                 }
 
                 // JSON yanıtı hazırlama
@@ -415,7 +417,7 @@ namespace PrintApp
             return truncatedText.ToString() + "."; // Kesildiğini belirten işaret
         }
 
-        private void PrintBarcode(string code, string productName, string productPrice, string priceChangeDate)
+        private void PrintBarcode(string code, string productName, string productPrice, string priceChangeDate, string unitprice ,string origin)
         {
             PrintDocument printDocument = new PrintDocument();
             printDocument.PrinterSettings.PrinterName = barcodePrinterName;
@@ -441,25 +443,52 @@ namespace PrintApp
                     yPosition += lineHeight;
                 }
 
+                if (origin == "Türkiye")
+                {
+                    // Yerli Üretim resmi ekleme (default.png dosyasını uygulama dizininden alıyoruz)
+                    string logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "yerliuretimlogo.jpg");
+
+                    if (File.Exists(logoPath))
+                    {
+                        Image yerliUretimImage = Image.FromFile(logoPath);
+
+                        // Resim boyutlarını ayarlama (örneğin 50px genişlik, orantılı yükseklik)
+                        int imageWidth = 75;
+                        int imageHeight = (yerliUretimImage.Height * imageWidth) / yerliUretimImage.Width;
+
+                        // Resmin yerleşimini sağ tarafa ve ürün adı altına ayarlama
+                        float imageXPosition = margin + 180; // Sağ tarafa yaslamak için
+                        float imageYPosition = yPosition; // Barkod resminin altına yerleştiriyoruz
+
+                        // Resmi çizdiriyoruz
+                        e.Graphics.DrawImage(yerliUretimImage, imageXPosition, imageYPosition, imageWidth, imageHeight);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Yerli üretim resmi bulunamadı.");
+                    }
+                }
+
+                // Birim fiyatı bilgisi
+                yPosition += 35; 
+                string birimFiyati = $"Birim Fiyatı: {unitprice}";
+                e.Graphics.DrawString(birimFiyati, smallFont, brush, margin, yPosition);
+
+                // Menşei bilgisi
+                string mensei = $"Menşei: {origin}";
+                SizeF birimFiyatiSize = e.Graphics.MeasureString(mensei, smallFont);
+                float birimFiyatiXPosition = e.PageBounds.Width - margin - birimFiyatiSize.Width; // En sağa yaslamak için
+                e.Graphics.DrawString(mensei, smallFont, brush, birimFiyatiXPosition, yPosition); // Aynı yPosition kullanıyoruz
+
+                yPosition += lineHeight;
+
                 // Fiyat değişiklik tarihi
-                yPosition += 30; // Ürün adı ve fiyat değişiklik tarihi arasına boşluk bırak
-                e.Graphics.DrawString($"Fiyat Değişiklik Tarihi : {priceChangeDate}", smallFont, brush, margin, yPosition);
+                e.Graphics.DrawString($"Fiyat Değişiklik Tarihi: {priceChangeDate}", smallFont, brush, margin, yPosition);
                 yPosition += lineHeight;
 
                 // Barkod resmi
                 Bitmap barcodeImage = GenerateBarcode(code);
                 e.Graphics.DrawImage(barcodeImage, margin, yPosition);
-
-                // Ürün fiyatını barkodun sağ tarafına hizalamak için
-                //float priceXPosition = margin + 160;
-                //e.Graphics.DrawString(productPrice + " ₺", priceFont, Brushes.Black, priceXPosition, yPosition);
-
-                //// "KDV Dahil" yazısı
-                //string kdvText = "KDV Dahil";
-                //SizeF kdvTextSize = e.Graphics.MeasureString(kdvText, smallFont);
-                //float kdvXPosition = priceXPosition + e.Graphics.MeasureString(productPrice, regularFont).Width;
-                //float kdvYPosition = yPosition + lineHeight + 15; // Fiyatın hemen altına hizala
-                //e.Graphics.DrawString(kdvText, smallFont, Brushes.Black, kdvXPosition, kdvYPosition);
 
                 // Fiyat ve "KDV Dahil" yazısı
                 SizeF priceSize = e.Graphics.MeasureString(productPrice, priceFont);
